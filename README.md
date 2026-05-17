@@ -2,7 +2,6 @@
 
 ![Shell](https://img.shields.io/badge/shell-bash-4EAA25?logo=gnubash&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)
-![Last Commit](https://img.shields.io/github/last-commit/privjoesrepos/server-stats-script)
 
 A lightweight, dependency-free Bash script that analyses core server performance metrics at a glance. Runs on any Linux distribution or macOS machine — no package installs required.
 
