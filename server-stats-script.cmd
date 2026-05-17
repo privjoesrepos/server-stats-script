@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+@# 2>nul & @goto WINDOWS_BLOCK
 # ======================================================================
 # server-stats-script.sh — Server performance analyser (Linux + macOS)
 # Usage: bash server-stats-script.sh
@@ -292,7 +293,6 @@ echo -e "  ${BOLD}Done.${RESET}  (sudo recommended for complete login-failure da
 # HTML GENERATION
 # ===================
 if [[ -n "$HTML_FILE" ]]; then
-    # Wait briefly for tee to finish flushing the buffer to the temp file
     sleep 0.5
 
     {
@@ -323,17 +323,272 @@ if [[ -n "$HTML_FILE" ]]; then
 <pre>
 HTMLHEADER
 
-        # Strip ANSI color codes from the temp log and include in HTML
-        sed -E $'s/\x1b\\[[0-9;]*[mGKH]//g' "$TEMP_LOG"
+        sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$TEMP_LOG"
 
         printf '\n</pre>\n</body>\n</html>\n'
     } > "$HTML_FILE"
 
-    # Clean up the temp file
     rm -f "$TEMP_LOG"
 
     echo -e "\n${GREEN}Report saved to ${BOLD}$HTML_FILE${RESET}" >&3
-    
-    # Close FD 3
+
     exec 3>&-
 fi
+exit 0
+
+:WINDOWS_BLOCK
+@echo off
+setlocal
+
+set "TEMP_PS=%TEMP%\server-stats-temp.ps1"
+
+:: Extract the PowerShell section from this file and save it to a temp file
+powershell.exe -ExecutionPolicy Bypass -NoLogo -Command "$l=Get-Content '%~f0';$r=0;for($i=0;$i -lt $l.count;$i++){if($l[$i] -match '^# PS_START'){$r=$i+1;break}};$l[$r..($l.count-1)] | Set-Content -Encoding UTF8 -Path '%TEMP_PS%'"
+
+:: Execute the temp PowerShell script
+powershell.exe -ExecutionPolicy Bypass -NoLogo -File "%TEMP_PS%" %1 %2
+
+:: Clean up the temp file
+del "%TEMP_PS%" >nul 2>&1
+
+echo.
+pause
+endlocal
+exit /b
+
+# PS_START
+# ======================================================================
+# WINDOWS SECTION (PowerShell)
+# ======================================================================
+
+param(
+    [string]$HtmlFile = ""
+)
+
+# Override $HtmlFile if called from Batch with --html
+if ($args.Count -ge 2 -and $args[0] -eq "--html") {
+    $HtmlFile = $args[1]
+}
+
+# ── Colours ──────────────────────────────────────────────────────────
+ $RED    = [char]27 + "[0;31m"; $YELLOW = [char]27 + "[1;33m"; $GREEN = [char]27 + "[0;32m"
+ $CYAN   = [char]27 + "[0;36m"; $BOLD   = [char]27 + "[1m";    $RESET = [char]27 + "[0m"
+
+# ── Helpers ──────────────────────────────────────────────────────────
+ $script:PendingLabel = ""
+ $script:PendingLabelClean = ""
+
+function hr         { log ("-" * 80) }
+function header($t) { log "`n${BOLD}${CYAN}${t}${RESET}"; hr }
+
+function label($l) {
+    $script:PendingLabel = "  ${BOLD}$($l.PadRight(28))${RESET}"
+    $script:PendingLabelClean = "  $($l.PadRight(28))"
+}
+
+function pct_colour($p) {
+    $val = [int]([math]::Truncate($p))
+    if     ($val -ge 85) { return "${RED}${p}%${RESET}" }
+    elseif ($val -ge 60) { return "${YELLOW}${p}%${RESET}" }
+    else                 { return "${GREEN}${p}%${RESET}" }
+}
+
+function to_gib($bytes) { return "{0:N2} GiB" -f ($bytes / 1GB) }
+
+# ── Capture Output for HTML ─────────────────────────────────────────
+ $OutputLines = [System.Collections.ArrayList]::new()
+
+function log($text) {
+    $fullLine = "$script:PendingLabel$text"
+    $fullLineClean = "$script:PendingLabelClean$text"
+    
+    $script:PendingLabel = ""
+    $script:PendingLabelClean = ""
+    
+    Write-Host $fullLine
+    
+    if ($HtmlFile -ne "") {
+        # Bulletproof ANSI stripping for the HTML file
+        $clean = [regex]::Replace($fullLineClean, '\x1b\[[0-9;]*[a-zA-Z]', '')
+        [void]$OutputLines.Add($clean)
+    }
+}
+
+# ── Banner ───────────────────────────────────────────────────────────
+log "`n${BOLD}Server Performance Stats${RESET}"
+log "  Generated : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss K')"
+log "  Hostname  : $env:COMPUTERNAME"
+
+# ===================
+# SYSTEM INFORMATION
+# ===================
+header "SYSTEM INFORMATION"
+
+ $os     = Get-CimInstance Win32_OperatingSystem
+ $uptime = (Get-Date) - $os.LastBootUpTime
+
+label "OS Version:";     log "$($os.Caption) $($os.Version)"
+label "Architecture:";   log $env:PROCESSOR_ARCHITECTURE
+label "CPU Cores:";      log "$($env:NUMBER_OF_PROCESSORS) logical"
+label "Uptime:";         log "up $($uptime.Days) days, $($uptime.Hours):$($uptime.Minutes.ToString('00'))"
+label "Load Average:";   log "N/A (Windows uses Processor Queue Length)"
+
+ $users = query user 2>$null | Select-Object -Skip 1 |
+    ForEach-Object { ($_ -split '\s+')[1] } |
+    Where-Object { $_ -ne '' -and $_ -ne '>' } |
+    Sort-Object -Unique
+label "Logged-in Users:"; log ($users -join ' ')
+
+# ===================
+# CPU USAGE
+# ===================
+header "CPU USAGE"
+
+ $cpu1 = Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 2
+ $pct  = [math]::Round(($cpu1 | Select-Object -Last 1).CounterSamples[0].CookedValue, 1)
+
+label "Total CPU Usage:"
+log "$(pct_colour $pct)  ($($env:NUMBER_OF_PROCESSORS) logical cores)"
+
+# ===================
+# MEMORY USAGE
+# ===================
+header "MEMORY USAGE"
+
+ $mem_total = $os.TotalVisibleMemorySize * 1KB
+ $mem_free  = $os.FreePhysicalMemory * 1KB
+ $mem_used  = $mem_total - $mem_free
+ $mem_avail = $mem_free
+
+ $mem_used_pct = [math]::Round(($mem_used / $mem_total) * 100, 1)
+ $mem_free_pct = [math]::Round(($mem_free / $mem_total) * 100, 1)
+
+label "Total:";     log "$(to_gib $mem_total)"
+label "Used:";      log "$(to_gib $mem_used)  ($(pct_colour $mem_used_pct))"
+label "Free:";      log "$(to_gib $mem_free)  ($mem_free_pct%)"
+label "Available:"; log "$(to_gib $mem_avail)"
+
+ $swap = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue
+if ($swap) {
+    $sw_used  = $swap.CurrentUsage * 1MB
+    $sw_total = $swap.AllocatedBaseSize * 1MB
+    $sw_pct   = [math]::Round(($sw_used / $sw_total) * 100, 1)
+    label "Swap Used:"; log "$(to_gib $sw_used) / $(to_gib $sw_total)  ($(pct_colour $sw_pct))"
+} else {
+    label "Swap:"; log "No pagefile configured"
+}
+
+# ===================
+# DISK USAGE
+# ===================
+header "DISK USAGE"
+
+log ("  ${BOLD}{0,-6} {1,12} {2,12} {3,12} {4,6}  {5}${RESET}" -f "FS", "Size", "Used", "Avail", "Use%", "Mounted on")
+hr
+
+Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
+    $d_total  = $_.Size
+    $d_free   = $_.FreeSpace
+    $d_used   = $d_total - $d_free
+    $d_pct    = [math]::Round(($d_used / $d_total) * 100, 1)
+    $d_letter = $_.DeviceID
+    $d_name   = if ($_.VolumeName) { $_.VolumeName } else { "" }
+
+    $sizeStr  = to_gib $d_total
+    $usedStr  = to_gib $d_used
+    $availStr = to_gib $d_free
+    $pctStr   = "$d_pct%"
+
+    $baseLine = "  {0,-6} {1,12} {2,12} {3,12} {4,6}  {5}" -f $d_letter, $sizeStr, $usedStr, $availStr, $pctStr, $d_name
+    
+    if ($d_pct -ge 85) { $c = $RED } elseif ($d_pct -ge 60) { $c = $YELLOW } else { $c = $GREEN }
+    $colouredLine = $baseLine -replace [regex]::Escape($pctStr), "$c$pctStr$RESET"
+    
+    log $colouredLine
+}
+
+# ===================
+# TOP 5 PROCESSES
+# ===================
+header "TOP 5 PROCESSES -- CPU"
+log ("  ${BOLD}{0,7}  {1,-12}  {2,10}  {3,6}  {4}${RESET}" -f "PID", "USER", "CPU (s)", "%MEM", "COMMAND")
+hr
+
+Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 5 | ForEach-Object {
+    $cpu_p = [math]::Round($_.CPU, 1)
+    $mem_p = [math]::Round(($_.WorkingSet64 / $mem_total) * 100, 1)
+    $cmd   = $_.Path
+    if (!$cmd) { $cmd = $_.ProcessName }
+    if ($cmd.Length -gt 60) { $cmd = $cmd.Substring(0, 57) + "..." }
+    $owner = if ($_.UserName) { $_.UserName.Split('\')[-1] } else { $env:USERNAME }
+    log ("  {0,7}  {1,-12}  {2,10}  {3,6}  {4}" -f $_.Id, $owner, $cpu_p, $mem_p, $cmd)
+}
+
+header "TOP 5 PROCESSES -- MEMORY"
+log ("  ${BOLD}{0,7}  {1,-12}  {2,6}  {3,10}  {4}${RESET}" -f "PID", "USER", "%MEM", "CPU (s)", "COMMAND")
+hr
+
+Get-Process -ErrorAction SilentlyContinue | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 | ForEach-Object {
+    $cpu_p = [math]::Round($_.CPU, 1)
+    $mem_p = [math]::Round(($_.WorkingSet64 / $mem_total) * 100, 1)
+    $cmd   = $_.Path
+    if (!$cmd) { $cmd = $_.ProcessName }
+    if ($cmd.Length -gt 60) { $cmd = $cmd.Substring(0, 57) + "..." }
+    $owner = if ($_.UserName) { $_.UserName.Split('\')[-1] } else { $env:USERNAME }
+    log ("  {0,7}  {1,-12}  {2,6}  {3,10}  {4}" -f $_.Id, $owner, $mem_p, $cpu_p, $cmd)
+}
+
+# ===================
+# FAILED LOGIN ATTEMPTS
+# ===================
+header "FAILED LOGIN ATTEMPTS (last 24 h)"
+
+try {
+    $events     = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4625; StartTime=(Get-Date).AddDays(-1)} -ErrorAction Stop
+    $fail_count = $events.Count
+    label "Failed Logins:"; log $fail_count
+
+    if ($fail_count -gt 0) {
+        log "`n  ${BOLD}Top offending IPs:${RESET}"
+        $events | ForEach-Object {
+            $xml = [xml]$_.ToXml()
+            $ip  = $xml.Event.EventData.Data |
+                Where-Object { $_.Name -eq 'IpAddress' } |
+                Select-Object -ExpandProperty '#text'
+            if ($ip -and $ip -ne "-" -and $ip -ne "::1") { $ip }
+        } | Group-Object | Sort-Object Count -Descending | Select-Object -First 5 | ForEach-Object {
+            log ("    {0,-6} attempts  from {1}" -f $_.Count, $_.Name)
+        }
+    }
+} catch {
+    label "Failed Logins:"; log "0 (or run as Admin to read Security log)"
+}
+
+log ""
+hr
+log "  ${BOLD}Done.${RESET}  (Admin recommended for complete login-failure data)"
+
+# ── HTML Generation ──────────────────────────────────────────────────
+if ($HtmlFile -ne "") {
+    $html = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Stats Report</title>
+    <style>
+        body { background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', Courier, monospace; padding: 20px; margin: 0; }
+        pre  { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+<pre>
+ $($OutputLines -join "`n")
+</pre>
+</body>
+</html>
+"@
+    [System.IO.File]::WriteAllText($HtmlFile, $html)
+    Write-Host "`n${GREEN}Report saved to ${BOLD}$HtmlFile${RESET}" -ForegroundColor Green
+}
