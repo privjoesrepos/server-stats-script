@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Stats Report</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 20px;
+            margin: 0;
+        }
+        pre {
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+<pre>
+
+Server Performance Stats
+  Generated : 2024-05-17 14:32:01 UTC
+  Hostname  : macbookpro.local
+
+SYSTEM INFORMATION
+--------------------------------------------------------------------------------
+  OS Version:                 macOS 14.4.1 (23E004)
+  Kernel:                     23.4.0
+  Architecture:               arm64
+  CPU Cores:                  16 logical
+  Uptime:                     up 22 days, 5:03
+  Load Average:               2.32 (1m)  2.11 (5m)  2.00 (15m)
+  Logged-in Users:            user1 
+
+CPU USAGE
+--------------------------------------------------------------------------------
+  Total CPU Usage:            20.7%  (16 logical cores)
+
+MEMORY USAGE
+--------------------------------------------------------------------------------
+  Total:                      64.00 GiB
+  Used:                       48.10 GiB  (75.2%)
+  Free:                       15.90 GiB  (24.8%)
+  Available:                  24.40 GiB
+  Swap Used:                  1.20 GiB / 2.00 GiB  (60.0%)
+
+DISK USAGE
+--------------------------------------------------------------------------------
+  Filesystem               Size     Used    Avail   Use%  Mounted on
+--------------------------------------------------------------------------------
+  /dev/disk3s1s1           1.0T      80G      220G    78%  /
+  /dev/disk3s5             1.0T     780G      220G    78%  /System/Volumes/Data
+
+TOP 5 PROCESSES -- CPU
+--------------------------------------------------------------------------------
+      PID  USER            %CPU    %MEM  COMMAND
+--------------------------------------------------------------------------------
+      127  _windowserver    45.4     0.9  /System/Library/PrivateFrameworks/SkyLight.framework/...
+    21401  localuser        19.6     2.6  /System/Library/Frameworks/WebKit.framework/...
+    21999  localuser        15.7     1.2  /usr/libexec/eyedatad
+    22675  localuser         5.0     0.9  /System/Applications/Utilities/Terminal.app/...
+      939  localuser         1.9     0.4  /usr/libexec/duetexpert
+
+TOP 5 PROCESSES -- MEMORY
+--------------------------------------------------------------------------------
+      PID  USER            %MEM    %CPU  COMMAND
+--------------------------------------------------------------------------------
+    25104  localuser        80.4     0.0  /Applications/Visual Studio Code.app/...
+    24826  localuser         4.2     0.0  /Applications/Visual Studio Code.app/...
+    29461  localuser         2.6    19.6  /System/Library/Frameworks/WebKit.framework/...
+    23424  localuser         2.3     0.0  /usr/libexec/secd
+    21156  localuser         1.9     0.0  /Applications/Visual Studio Code.app/...
+
+FAILED LOGIN ATTEMPTS (last 24 h)
+--------------------------------------------------------------------------------
+  SSH Failed Logins:          0
+
+--------------------------------------------------------------------------------
+  Done.  (sudo recommended for complete login-failure data)
+
+</pre>
+</body>
+</html>
