@@ -1,12 +1,8 @@
 # server-stats-script.cmd
 
 ![Shell](https://img.shields.io/badge/shell-bash-4EAA25?logo=gnubash&logoColor=white)
-<<<<<<< HEAD
-![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)
-=======
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)
 ![Last Commit](https://img.shields.io/github/last-commit/privjoesrepos/server-stats-script)
->>>>>>> af4673c (feat: add native Windows support via polyglot architecture)
 
 A lightweight, dependency-free polyglot script that analyses core server performance metrics at a glance. Runs natively on Linux, macOS, and Windows — no package installs required.
 
